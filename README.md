@@ -25,7 +25,6 @@ A conversational AI system leveraging both temporal and semantic memory for enha
 1. Clone the repository:
    ```
    git clone <repository-url>
-   cd my_ai2
    ```
 
 2. Create and activate a virtual environment:
