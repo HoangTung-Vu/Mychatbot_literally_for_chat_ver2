@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hybrid Memory AI Chat</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Hybrid Memory AI Assistant</h1>
+            <p>An AI with temporal and semantic memory capabilities</p>
+        </header>
+        
+        <main>
+            <div class="chat-container">
+                <div class="chat-messages" id="chat-messages">
+                    <div class="message system">
+                        <div class="message-content">
+                            <p>Hello! I'm your AI assistant with hybrid memory. I can remember our conversations over time and learn from our interactions. How can I help you today?</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chat-input-container">
+                    <form id="chat-form">
+                        <textarea id="chat-input" placeholder="Type your message here..." rows="3"></textarea>
+                        <button type="submit" id="send-button">Send</button>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="memory-insights hidden" id="memory-insights">
+                <h3>Memory Insights</h3>
+                <div class="insights-content">
+                    <div class="semantic-memory">
+                        <h4>Semantic Memory</h4>
+                        <div id="semantic-content"></div>
+                    </div>
+                    <div class="temporal-memory">
+                        <h4>Temporal Memory</h4>
+                        <div id="temporal-content"></div>
+                    </div>
+                </div>
+                <button id="toggle-insights" class="toggle-button">Show Memory Insights</button>
+            </div>
+        </main>
+        
+        <footer>
+            <p>Powered by FastAPI, ChromaDB, and Google Gemini</p>
+        </footer>
+    </div>
+    
+    <script src="/static/js/script.js"></script>
+</body>
+</html>

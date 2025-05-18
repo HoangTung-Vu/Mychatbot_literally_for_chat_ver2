@@ -1,0 +1,166 @@
+import os
+import time
+import logging
+import uuid
+import datetime
+from typing import List, Dict, Any, Optional, Union
+
+import chromadb
+from chromadb.api.models import Collection
+import numpy as np
+
+logger = logging.getLogger(__name__)
+
+class MemoryService:
+    """
+    Service for managing semantic memory through vector database operations.
+    Handles embedding, storage, and retrieval of semantic information.
+    """
+    
+    def __init__(self, db_path: str, collection_name: str = "semantic_memory"):
+        """
+        Initialize the memory service with a path to the ChromaDB database.
+        
+        Args:
+            db_path: Path to the ChromaDB persistent directory
+            collection_name: Name of the collection to use
+        """
+        self.db_path = db_path
+        self.collection_name = collection_name
+        
+        # Create directory if it doesn't exist
+        os.makedirs(self.db_path, exist_ok=True)
+        
+        # Initialize ChromaDB client
+        self.client = chromadb.PersistentClient(path=self.db_path)
+        
+        # Get or create the collection
+        try:
+            self.collection = self.client.get_collection(name=self.collection_name)
+            logger.info(f"Retrieved existing collection: {self.collection_name}")
+        except Exception as e:
+            logger.info(f"Creating new collection: {self.collection_name}")
+            self.collection = self.client.create_collection(name=self.collection_name)
+            
+    def add_document(self, text: str, metadata: Optional[Dict[str, Any]] = None) -> str:
+        """
+        Add a document to the vector store with automatic embedding.
+        
+        Args:
+            text: Text content to be embedded and stored
+            metadata: Optional metadata for the document
+            
+        Returns:
+            Document ID
+        """
+        # Generate a unique ID if none provided in metadata
+        doc_id = str(uuid.uuid4())
+        
+        # Update metadata with timestamp if not present
+        if metadata is None:
+            metadata = {}
+        if 'timestamp' not in metadata:
+            metadata['timestamp'] = time.time()
+        
+        # Add ISO format datetime if not present
+        if 'datetime' not in metadata:
+            metadata['datetime'] = datetime.datetime.now().isoformat()
+            
+        try:
+            self.collection.add(
+                documents=[text],
+                metadatas=[metadata],
+                ids=[doc_id]
+            )
+            return doc_id
+        except Exception as e:
+            logger.error(f"Error adding document to vector store: {e}")
+            raise
+            
+    def query_similar_documents(self, 
+                               query_text: str, 
+                               n_results: int = 5,
+                               where: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        """
+        Query the vector store for documents similar to the query text.
+        
+        Args:
+            query_text: Text to find similar documents for
+            n_results: Maximum number of results to return
+            where: Optional filter criteria
+            
+        Returns:
+            List of similar documents with their metadata
+        """
+        try:
+            results = self.collection.query(
+                query_texts=[query_text],
+                n_results=n_results,
+                where=where
+            )
+            
+            # Format the results
+            formatted_results = []
+            for i, doc in enumerate(results['documents'][0]):
+                result = {
+                    'text': doc,
+                    'metadata': results['metadatas'][0][i] if results['metadatas'] else {},
+                    'id': results['ids'][0][i],
+                    'distance': results.get('distances', [[]])[0][i] if results.get('distances') else None
+                }
+                formatted_results.append(result)
+                
+            return formatted_results
+        except Exception as e:
+            logger.error(f"Error querying vector store: {e}")
+            return []
+            
+    def delete_document(self, doc_id: str) -> bool:
+        """
+        Delete a document from the vector store.
+        
+        Args:
+            doc_id: ID of the document to delete
+            
+        Returns:
+            Success status
+        """
+        try:
+            self.collection.delete(ids=[doc_id])
+            return True
+        except Exception as e:
+            logger.error(f"Error deleting document from vector store: {e}")
+            return False
+            
+    def update_document(self, doc_id: str, text: str, metadata: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        Update an existing document in the vector store.
+        
+        Args:
+            doc_id: ID of the document to update
+            text: New text content
+            metadata: New metadata
+            
+        Returns:
+            Success status
+        """
+        try:
+            # Update the metadata with a timestamp if not present
+            if metadata is None:
+                metadata = {}
+            if 'timestamp' not in metadata:
+                metadata['timestamp'] = time.time()
+                
+            # Add ISO format datetime if not present
+            if 'datetime' not in metadata:
+                metadata['datetime'] = datetime.datetime.now().isoformat()
+                
+            self.collection.update(
+                ids=[doc_id],
+                documents=[text],
+                metadatas=[metadata]
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Error updating document in vector store: {e}")
+            return False

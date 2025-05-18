@@ -1,0 +1,181 @@
+from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
+import logging
+from typing import List, Dict, Any, Optional
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
+import uuid
+import time
+import datetime
+
+from app.models.chat_models import ChatRequest, ChatResponse, MemoryEntry
+from app.services.temporal_service import TemporalService
+from app.services.memory_service import MemoryService
+from app.services.llm.main_llm_service import MainLLMService
+from app.services.llm.temporal_agent_service import TemporalAgentService
+from app.services.llm.memorize_agent_service import MemorizeAgentService
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter()
+
+# Dependency to get service instances
+def get_temporal_service():
+    # In a real application, you'd load this from environment variables
+    return TemporalService(db_path="./data/chat_history.db")
+    
+def get_memory_service():
+    # In a real application, you'd load this from environment variables
+    return MemoryService(db_path="./data/vector_store", collection_name="semantic_memory")
+    
+def get_main_llm_service():
+    return MainLLMService()
+    
+def get_temporal_agent_service():
+    return TemporalAgentService()
+    
+def get_memorize_agent_service():
+    return MemorizeAgentService()
+
+@router.post("/chat", response_model=ChatResponse)
+async def chat(
+    request: ChatRequest,
+    background_tasks: BackgroundTasks,
+    temporal_service: TemporalService = Depends(get_temporal_service),
+    memory_service: MemoryService = Depends(get_memory_service),
+    main_llm: MainLLMService = Depends(get_main_llm_service),
+    temporal_agent: TemporalAgentService = Depends(get_temporal_agent_service),
+    memorize_agent: MemorizeAgentService = Depends(get_memorize_agent_service)
+):
+    """
+    Process a chat request and generate a response with context from memory systems.
+    This implements the Prompt Stage of the system.
+    """
+    try:
+        # Step 1: Save the user's prompt in temporal memory
+        temporal_service.save_interaction(
+            content=request.prompt,
+            role="user"
+        )
+        
+        # Step 2: Retrieve temporal information with Temporal Agent
+        sql_query = temporal_agent.generate_sql_query(request.prompt)
+        queried_messages = temporal_service.execute_sql_query(sql_query)
+        
+        # Step 3: Relevance Filtering using simple keyword matching
+        # In a more sophisticated system, you would use embeddings comparison here
+        messages_relevant_from_time = filter_relevant_messages(
+            request.prompt, queried_messages
+        )
+        
+        # Step 4: Semantic Memory Retrieval
+        query_for_semantic = memorize_agent.determine_query_needs(request.prompt)
+        retrieved_important_info = memory_service.query_similar_documents(
+            query_for_semantic, n_results=5
+        )
+        
+        # Step 4a: Filter retrieved information by importance considering time
+        current_time = datetime.datetime.now()
+        filtered_important_info = memorize_agent.important_till_now(
+            retrieved_important_info, 
+            current_time
+        )
+        
+        # Step 5: Recent Conversation History
+        recent_messages = temporal_service.get_recent_messages(count=4)
+        
+        # Step 6: Generate Response with Main LLM
+        response_text = main_llm.generate_response(
+            prompt=request.prompt,
+            recent_messages=recent_messages,
+            temporal_context=messages_relevant_from_time,
+            semantic_context=filtered_important_info  # Using filtered information based on time relevance
+        )
+        
+        # Save Stage: Add the response to the conversation history
+        background_tasks.add_task(
+            save_memory_in_background,
+            request.prompt,
+            response_text,
+            temporal_service,
+            memory_service,
+            memorize_agent
+        )
+        
+        # Return the response
+        return ChatResponse(
+            response_text=response_text,
+            temporal_context=messages_relevant_from_time,
+            semantic_context=filtered_important_info  # Return the filtered information
+        )
+        
+    except Exception as e:
+        logger.error(f"Error processing chat request: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="An error occurred while processing your request."
+        )
+
+def filter_relevant_messages(prompt: str, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Filter messages based on relevance to the prompt.
+    This is a simple implementation using keyword matching.
+    A more sophisticated approach would use embeddings and cosine similarity.
+    """
+    if not messages:
+        return []
+        
+    # Extract keywords from the prompt (simple implementation)
+    prompt_words = set(prompt.lower().split())
+    
+    # Filter messages that have overlapping words with the prompt
+    relevant_messages = []
+    for msg in messages:
+        msg_words = set(msg.get('content', '').lower().split())
+        # Calculate a simple relevance score based on word overlap
+        overlap = len(prompt_words.intersection(msg_words))
+        if overlap > 0:
+            msg['relevance_score'] = overlap / len(prompt_words)
+            relevant_messages.append(msg)
+    
+    # Sort by relevance
+    relevant_messages.sort(key=lambda x: x.get('relevance_score', 0), reverse=True)
+    
+    # Return top 5 most relevant messages
+    return relevant_messages[:5]
+
+async def save_memory_in_background(
+    prompt: str,
+    response: str,
+    temporal_service: TemporalService,
+    memory_service: MemoryService,
+    memorize_agent: MemorizeAgentService
+):
+    """
+    Background task to save the conversation in both temporal and semantic memory.
+    This implements the Save Stage of the system.
+    """
+    try:
+        # Step 1: Save the response to temporal memory
+        temporal_service.save_interaction(
+            content=response,
+            role="assistant"
+        )
+        
+        # Step 2: Extract important information from the conversation
+        extracted_info = memorize_agent.extract_from_conversation(prompt, response)
+        
+        # Step 3: Save important information to semantic memory
+        for text, metadata in extracted_info:
+            try:
+                # Add timestamp and datetime to metadata
+                metadata.update({
+                    "timestamp": time.time(),
+                    "datetime": datetime.datetime.now().isoformat()
+                })
+                
+                memory_service.add_document(text, metadata)
+            except Exception as e:
+                logger.error(f"Error storing extracted information in semantic memory: {e}")
+                
+    except Exception as e:
+        logger.error(f"Error in background memory saving: {e}", exc_info=True)

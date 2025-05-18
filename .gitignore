@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+myai/
+venv/
+env/
+ENV/
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local development configuration
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Database
+data/
+data/vector_store/
+*.db
+*.sqlite3
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Gemini API keys and other sensitive information
+**/private_*.txt
+credentials.json
+*_credentials.*
+
+# System Files
+.DS_Store
+Thumbs.db
