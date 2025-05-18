@@ -41,11 +41,33 @@ A conversational AI system leveraging both temporal and semantic memory for enha
    pip install -r requirements.txt
    ```
 
-4. Create a `.env` file with the following content:
+4. Create a `.env` file in the root directory with the following content:
    ```
    GEMINI_API_KEY=your_gemini_api_key_here
    ENVIRONMENT=development
    ```
+   
+   You can get your Gemini API key by:
+   - Visiting Google AI Studio (https://ai.google.dev/)
+   - Creating or logging into your account
+   - Going to "API keys" section
+   - Creating a new API key or using an existing one
+
+5. Create a system prompt file:
+   Create a file named `private_main_system_prompt.txt` in the `app/services/llm/` directory. This file defines the personality and behavior of your AI assistant. You can customize it based on your preferences.
+
+## Setting Up Gemini API
+
+This project uses Google's Gemini API for generating AI responses. The integration works as follows:
+
+1. The application uses your Gemini API key from the `.env` file
+2. Requests are sent to Gemini's API with your custom system prompt and conversation history
+3. Responses are processed through the hybrid memory system for context retention
+
+API usage notes:
+- Free tier Gemini API has rate limits (check Google AI Studio for current limits)
+- Ensure your API key has access to the models used in this application
+- For production use, consider upgrading to a paid tier
 
 ## Usage
 
@@ -87,14 +109,24 @@ A conversational AI system leveraging both temporal and semantic memory for enha
 3. Update services in `app/services/`
 4. Update the user interface if needed
 
-### Testing
+### Customizing the AI Assistant
 
-Currently, there is no test suite. This is an area for future development.
+You can modify the `private_main_system_prompt.txt` file to change how the AI responds. The system prompt defines:
+- The AI's personality traits
+- How it should interact with users
+- What information it has access to
+- Any specific response patterns or behaviors
+
+## Troubleshooting
+
+- **API Key Issues**: Verify your Gemini API key is correctly added to the `.env` file
+- **Memory Database**: If experiencing issues, try deleting the data folder and restarting
+- **Dependencies**: Make sure all requirements are installed correctly
 
 ## License
 
-[Choose an appropriate license for your project]
-
+None
 ## Contact
 
-[Your contact information]
+Vũ Minh Hoàng Tùng
+minhhoangtungvu04@gmail.com
