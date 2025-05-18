@@ -41,10 +41,15 @@ A conversational AI system leveraging both temporal and semantic memory for enha
    ```
 
 4. Create a `.env` file in the root directory with the following content:
-   ```
-   GEMINI_API_KEY=your_gemini_api_key_here
-   ENVIRONMENT=development
-   ```
+    ```
+    GEMINI_API_KEY=your_gemini_api_key_here
+
+    SQLITE_DB_PATH=./data/chat_history.db
+    VECTOR_DB_PATH=./data/vector_store
+
+    VECTOR_DB_COLLECTION_NAME=semantic_memory
+    ENVIRONMENT=development
+    ```
    
    You can get your Gemini API key by:
    - Visiting Google AI Studio (https://ai.google.dev/)
