@@ -20,6 +20,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Set up event listeners
     setupEventListeners();
     
+    // Load all conversation history when page loads
+    loadChatHistory();
+    
     // Focus the input field on load
     chatInput.focus();
 });
@@ -42,6 +45,49 @@ function setupEventListeners() {
     
     // Toggle memory insights
     toggleInsightsButton.addEventListener('click', toggleMemoryInsights);
+}
+
+// Load all conversation history
+async function loadChatHistory() {
+    try {
+        // Show loading indicator
+        const loadingDiv = document.createElement('div');
+        loadingDiv.className = 'message system';
+        loadingDiv.innerHTML = '<div class="message-content"><p>Loading conversation history...</p></div>';
+        chatMessages.appendChild(loadingDiv);
+
+        const response = await fetch('/api/chat/history');
+        if (!response.ok) {
+            throw new Error(`HTTP error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        // Clear loading message and welcome message
+        chatMessages.innerHTML = '';
+
+        // Check if there are messages to display
+        if (data.messages && data.messages.length > 0) {
+            // Add all messages to the chat
+            data.messages.forEach(message => {
+                addMessageToChat(message.role, message.content);
+            });
+        } else {
+            // If no messages, show the welcome message
+            const welcomeDiv = document.createElement('div');
+            welcomeDiv.className = 'message system';
+            welcomeDiv.innerHTML = '<div class="message-content"><p>Hello! I\'m your AI assistant with hybrid memory. I can remember our conversations over time and learn from our interactions. How can I help you today?</p></div>';
+            chatMessages.appendChild(welcomeDiv);
+        }
+        
+        // Scroll to the bottom
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    } catch (error) {
+        console.error('Error loading chat history:', error);
+        
+        // Show error message
+        chatMessages.innerHTML = '<div class="message system"><div class="message-content"><p>Error loading chat history. Please refresh the page to try again.</p></div></div>';
+    }
 }
 
 // Submit the chat form

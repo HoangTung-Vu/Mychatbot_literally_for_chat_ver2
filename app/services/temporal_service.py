@@ -173,3 +173,40 @@ class TemporalService:
             logger.error(f"SQLite error: {e}")
             conn.close()
             return []
+
+    def get_all_messages(self) -> List[Dict[str, Any]]:
+        """
+        Get all messages from the database in chronological order.
+        
+        Returns:
+            List of all message dictionaries
+        """
+        conn = self._get_connection()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        query = '''
+        SELECT id, role, content, timestamp, metadata
+        FROM conversations
+        ORDER BY timestamp ASC
+        '''
+        
+        cursor.execute(query)
+        rows = cursor.fetchall()
+        
+        # Convert to list of dictionaries
+        messages = []
+        for row in rows:
+            message = {
+                'id': row['id'],
+                'role': row['role'],
+                'content': row['content'],
+                'timestamp': row['timestamp'],
+                'datetime': datetime.fromtimestamp(row['timestamp']).isoformat(),
+                'metadata': json.loads(row['metadata']) if row['metadata'] else {}
+            }
+            messages.append(message)
+            
+        conn.close()
+        
+        return messages

@@ -75,13 +75,23 @@ async def chat(
         
         # Step 4a: Filter retrieved information by importance considering time
         current_time = datetime.datetime.now()
-        filtered_important_info = memorize_agent.important_till_now(
+        filtered_important_info_text = memorize_agent.important_till_now(
             retrieved_important_info, 
             current_time
         )
         
+        # Format the filtered information as a list with a single item for the response model
+        if filtered_important_info_text:
+            filtered_important_info = [{
+                'text': filtered_important_info_text,
+                'metadata': {'source': 'filtered_by_importance', 'datetime': current_time.isoformat()},
+                'id': str(uuid.uuid4())
+            }]
+        else:
+            filtered_important_info = []
+        
         # Step 5: Recent Conversation History
-        recent_messages = temporal_service.get_recent_messages(count=4)
+        recent_messages = temporal_service.get_recent_messages(count=8)
         
         # Step 6: Generate Response with Main LLM
         response_text = main_llm.generate_response(
@@ -113,6 +123,28 @@ async def chat(
         raise HTTPException(
             status_code=500,
             detail="An error occurred while processing your request."
+        )
+
+@router.get("/chat/history")
+async def get_chat_history(
+    temporal_service: TemporalService = Depends(get_temporal_service)
+):
+    """
+    Get all chat history from the temporal memory.
+    This endpoint is used to load all previous messages when the UI loads.
+    """
+    try:
+        # Retrieve all messages from temporal memory
+        all_messages = temporal_service.get_all_messages()
+        
+        return {
+            "messages": all_messages
+        }
+    except Exception as e:
+        logger.error(f"Error retrieving chat history: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, 
+            detail="An error occurred while retrieving chat history."
         )
 
 def filter_relevant_messages(prompt: str, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
