@@ -3,6 +3,8 @@ import os
 from typing import List, Dict, Any, Optional
 import google.generativeai as genai
 from google.generativeai import types
+import datetime
+from datetime import datetime
 
 from app.services.llm import BaseLLMService
 
@@ -117,6 +119,12 @@ class MainLLMService(BaseLLMService):
         # Start with the base system prompt loaded from file
         system_prompt = self.base_system_prompt
         
+        # Add time context
+        system_prompt += "\n\n## Current Date and Time Context:\n"
+        system_prompt += f"\n- Current Date: {datetime.now().strftime('%Y-%m-%d')}"
+        system_prompt += f"\n- Current Time: {datetime.now().strftime('%H:%M:%S')}"
+        system_prompt += f"\n- Current Day: {datetime.now().strftime('%A')}"
+
         # Add recent conversation history
         if recent_messages and len(recent_messages) > 0:
             system_prompt += "\n\n## Recent Conversation History:\n"

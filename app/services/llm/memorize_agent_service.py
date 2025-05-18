@@ -181,7 +181,7 @@ Please select and prioritize the most important, relevant, and current informati
             days_info = f" (from {doc['days_old']} days ago)" if doc['days_old'] is not None else " (unknown age)"
             prompt += f"{i}. {doc['text']}{days_info}\n"
             
-        prompt += "\nProvide only the most important and still relevant information as a concise summary."
+        prompt += "\nProvide only still relevant information."
         
         # Generate response that filters and prioritizes information
         try:
