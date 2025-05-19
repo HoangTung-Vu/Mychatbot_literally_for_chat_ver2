@@ -127,6 +127,85 @@ You can modify the `private_main_system_prompt.txt` file to change how the AI re
 - **Memory Database**: If experiencing issues, try deleting the data folder and restarting
 - **Dependencies**: Make sure all requirements are installed correctly
 
+## How It Works
+
+### Hybrid Memory Architecture
+
+This system uses a dual-memory architecture that mimics human memory systems:
+
+1. **Temporal Memory System**
+   - Stores complete conversation history chronologically in a SQLite database
+   - Allows time-based filtering and retrieval of past conversations
+   - Provides conversational history context to the AI
+
+2. **Semantic Memory System**
+   - Uses ChromaDB vector database to store important information extracted from conversations
+   - Embeds information for semantic similarity search
+   - Captures knowledge that should persist beyond immediate conversational context
+
+### Processing Flow
+
+The conversation flow follows these main stages:
+
+1. **Prompt Stage**
+   - User sends a message through the web interface or API
+   - The system saves the message to temporal memory
+   - Temporal Agent analyzes the message for time references and generates SQL queries
+   - Recent conversation history is retrieved
+   - Semantic Memory is searched for relevant information
+
+2. **Response Generation Stage**
+   - All collected context is formatted and sent to the Main LLM (Gemini)
+   - The LLM generates a response considering:
+     - The user's current question
+     - Recent conversation history
+     - Time-relevant past conversations
+     - Important semantic memories
+
+3. **Save Stage**
+   - The AI's response is saved to temporal memory
+   - Memorize Agent extracts important information from the conversation
+   - Important information is embedded and stored in semantic memory for later retrieval
+
+### Intelligent Components
+
+The system has specialized agents that handle different aspects:
+
+1. **Main LLM Service** (Gemini 1.5 Pro)
+   - Primary AI that generates responses to user queries
+   - Integrates all context from memory systems
+
+2. **Temporal Agent** (Gemini 1.5 Flash)
+   - Analyzes user questions for time references
+   - Generates SQL queries to retrieve time-relevant conversations
+   - Handles queries like "What did we talk about yesterday?" or "Show me conversations from May"
+
+3. **Memorize Agent** (Gemini 1.5 Flash)
+   - Extracts and evaluates important information from conversations
+   - Determines what should be stored in semantic memory
+   - Ranks information by importance and relevance
+
+### Memory Filtering
+
+The system intelligently filters memories to provide the most relevant context:
+
+1. **Time-based Filtering**
+   - Identifies time references in queries
+   - Retrieves conversations from specific time periods
+   - Uses customized SQL queries for precise temporal search
+
+2. **Relevance Filtering**
+   - Compares semantic similarity between current query and stored information
+   - Ranks information by relevance to current conversation
+   - Prioritizes information based on contextual importance
+
+3. **Importance Evaluation**
+   - Evaluates information longevity and significance
+   - Determines how long certain information should be considered relevant
+   - Automatically filters out outdated or less important information
+
+This hybrid approach creates an AI that can maintain conversational context over time while efficiently retrieving relevant information from past interactions, similar to human memory processes.
+
 ## License
 
 None
