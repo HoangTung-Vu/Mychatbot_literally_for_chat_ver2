@@ -6,8 +6,10 @@ from datetime import datetime, timedelta, timezone
 import json
 import logging
 import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from transformers import AutoTokenizer, AutoModel
+import torch 
+
 
 # Define GMT+7 timezone
 GMT7 = timezone(timedelta(hours=7))
@@ -28,6 +30,8 @@ class TemporalService:
             db_path: Path to the SQLite database file
         """
         self.db_path = db_path
+        self.model = AutoModel.from_pretrained("keepitreal/vietnamese-sbert")
+        self.tokenizer = AutoTokenizer.from_pretrained("keepitreal/vietnamese-sbert")
         self._ensure_db_exists()
         
     def _ensure_db_exists(self) -> None:
@@ -230,53 +234,37 @@ class TemporalService:
         
         return messages
     
-    def filter_relevant_messages(self, prompt: str, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+
+    def _get_embedding(self, text: str) -> torch.Tensor:
+        """Tokenize and get the [CLS] token embedding for a given text."""
+        inputs = self.tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=256)
+        with torch.no_grad():
+            outputs = self.model(**inputs)
+        return outputs.last_hidden_state[:, 0, :].cpu().numpy()
+
+    def filter_relevant_messages(self, query: str, messages: List[Dict[str, Any]], threshold : float = 0.4) -> List[Dict[str, Any]]:
         """
-        Filter messages based on relevance to the prompt using cosine similarity.
-        
-        Args:
-            prompt: The query prompt to find relevant messages for
-            messages: List of message dictionaries
-            
-        Returns:
-            List of relevant message dictionaries sorted by similarity
+        Filter messages based on relevance to the query using cosine similarity.
+        Use keepitreal/vietnamese-sbert model for embeddings.
         """
-        if not messages or not prompt:
-            return []
-        
-        # Extract content from messages
-        contents = [msg.get('content', '') for msg in messages]
-        if not contents:
-            return []
-        
-        # Include the prompt as the last document
-        all_docs = contents + [prompt]
-        
-        # Create TF-IDF vectors
-        try:
-            vectorizer = TfidfVectorizer(stop_words='english')
-            tfidf_matrix = vectorizer.fit_transform(all_docs)
-            
-            # Get the prompt vector (last in the matrix)
-            prompt_vector = tfidf_matrix[-1]
-            
-            # Calculate cosine similarity between prompt and each message
-            similarities = cosine_similarity(prompt_vector, tfidf_matrix[:-1])[0]
-            
-            # Add similarity scores to messages and filter by threshold
-            relevant_messages = []
-            for i, (score, msg) in enumerate(zip(similarities, messages)):
-                # Only include messages with similarity < 0.3
-                if score < 0.2:
-                    msg_copy = msg.copy()
-                    msg_copy['relevance_score'] = float(score)
-                    relevant_messages.append(msg_copy)
-            
-            # Sort by timestamp (earlier first) instead of relevance score
-            relevant_messages.sort(key=lambda x: x.get('timestamp', 0))
-            
-            return relevant_messages
-        
-        except Exception as e:
-            logger.error(f"Error calculating message similarity: {e}")
-            return []
+        query_embedding = self._get_embedding(query)
+        relevant_messages = []
+
+        for msg in messages:
+            content = msg.get('content', '')
+            if not content:
+                continue
+
+            msg_embedding = self._get_embedding(content)
+            similarity = cosine_similarity(query_embedding, msg_embedding)[0][0]
+            # print(f"Similarity: {similarity:.4f} for message: {content[:50]}...")
+            if similarity >= threshold:
+                print(f"Similarity: {similarity:.4f} for message: {content[:50]}...")
+                msg_with_score = msg.copy()
+                msg_with_score['similarity'] = float(similarity)
+                relevant_messages.append(msg_with_score)
+
+        # Sort messages by similarity score in descending order
+        relevant_messages.sort(key=lambda x: x['similarity'], reverse=True)
+        return relevant_messages
+

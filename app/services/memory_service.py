@@ -85,7 +85,7 @@ class MemoryService:
                                query_text: str, 
                                n_results: int = 5,
                                where: Optional[Dict[str, Any]] = None,
-                               threshold: float = 0.8) -> List[Dict[str, Any]]:
+                               threshold: float = 1.0) -> List[Dict[str, Any]]:
         """
         Query the vector store for documents similar to the query text.
         

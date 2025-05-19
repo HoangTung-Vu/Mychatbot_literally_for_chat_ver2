@@ -134,26 +134,15 @@ class TemporalAgentService(BaseLLMService):
         Returns:
             True if valid, False otherwise
         """
-        # Convert to lowercase for easier checking
         sql_lower = sql_query.lower()
-        
-        # Check that it's a SELECT statement
         if not sql_lower.startswith("select "):
             return False
-        
-        # Check that it contains datetime conversion with GMT+7 timezone
         if "datetime(timestamp, 'unixepoch', '+7 hours') as datetime" not in sql_lower:
             return False
-        
-        # Check that it contains role
         if "role" not in sql_lower:
-            return False
-        
-        # Check that it's querying the conversations table
+            return False        
         if "from conversations" not in sql_lower:
             return False
-            
-        # Check content column
         has_content = "content" in sql_lower.split("where")[0] if "where" in sql_lower else "content" in sql_lower
         if has_content and not allow_content:
             return False

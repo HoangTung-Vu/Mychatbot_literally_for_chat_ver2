@@ -60,3 +60,7 @@ credentials.json
 # System Files
 .DS_Store
 Thumbs.db
+
+#Test Files
+tests/
+test_*

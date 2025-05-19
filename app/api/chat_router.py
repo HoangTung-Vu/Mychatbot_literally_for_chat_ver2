@@ -55,24 +55,20 @@ async def chat(
     This implements the Prompt Stage of the system.
     """
     try:
-        # Step 1: Save the user's prompt in temporal memory
-        temporal_service.save_interaction(
-            content=request.prompt,
-            role="user"
-        )
         
         # Step 2: Retrieve temporal information with Temporal Agent
         sql_query = temporal_agent.generate_sql_query(request.prompt)
         print(f"Generated SQL Query: {sql_query}")
         queried_messages = temporal_service.execute_sql_query(sql_query)
-        # print(f"Queried Messages: {queried_messages}")
 
         # Step 3: Relevance Filtering
-        # In a more sophisticated system, you would use embeddings comparison here
+        # Rõ ràng thiết lập ngưỡng 0.7 cho việc lọc tin nhắn
         messages_relevant_from_time = temporal_service.filter_relevant_messages(
-            request.prompt, queried_messages
+            request.prompt, 
+            queried_messages,
+            threshold=0.55  # Đặt rõ ngưỡng ở đây
         )
-        
+            
         # Step 4: Semantic Memory Retrieval
         query_for_semantic = memorize_agent.determine_query_needs(request.prompt)
         retrieved_important_info = memory_service.query_similar_documents(
@@ -108,6 +104,10 @@ async def chat(
         )
         
         # Save Stage: Add the response to the conversation history
+        temporal_service.save_interaction(
+            content=request.prompt,
+            role="user"
+        )
         background_tasks.add_task(
             save_memory_in_background,
             request.prompt,
