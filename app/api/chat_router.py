@@ -63,7 +63,6 @@ async def chat(
         queried_messages = temporal_service.execute_sql_query(sql_query)
 
         # Step 3: Relevance Filtering
-        # Rõ ràng thiết lập ngưỡng 0.7 cho việc lọc tin nhắn
         messages_relevant_from_time = temporal_service.filter_relevant_messages(
             request.prompt, 
             queried_messages,
@@ -75,9 +74,10 @@ async def chat(
         retrieved_important_info = memory_service.query_similar_documents(
             query_for_semantic, 
             n_results=SIMILAR_DOCUMENTS_COUNT,
-            threshold=SIMILAR_DOCUMENTS_THRESHOLD
+            threshold=SIMILAR_DOCUMENTS_THRESHOLD  
         )
-        
+        for doc in retrieved_important_info:
+            print(f"Retrieved Document: {doc['text']} --- Similarity Score: {doc['similarity']}")
         # Step 4a: Filter retrieved information by importance considering time
         current_time = datetime.datetime.now(GMT7)
         filtered_important_info_text = memorize_agent.important_till_now(
@@ -176,8 +176,6 @@ async def save_memory_in_background(
             content=response,
             role="assistant"
         )
-        
-
 
         # Step 2: Extract important information from the conversation
         extracted_info = memorize_agent.extract_from_conversation(prompt, response)

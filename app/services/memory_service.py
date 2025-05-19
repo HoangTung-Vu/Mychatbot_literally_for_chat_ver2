@@ -9,6 +9,11 @@ from datetime import timezone, timedelta
 import chromadb
 from chromadb.api.models import Collection
 import numpy as np
+from transformers import AutoTokenizer, AutoModel
+import torch
+
+# Import the custom embedding function
+from app.services.embedding_functions import VietnameseSBERTEmbeddingFunction
 
 # Define GMT+7 timezone
 GMT7 = timezone(timedelta(hours=7))
@@ -35,16 +40,22 @@ class MemoryService:
         # Create directory if it doesn't exist
         os.makedirs(self.db_path, exist_ok=True)
         
+        embedding_func = VietnameseSBERTEmbeddingFunction()
+        
         # Initialize ChromaDB client
         self.client = chromadb.PersistentClient(path=self.db_path)
         
-        # Get or create the collection
         try:
+            # First try to get the existing collection without specifying the embedding function
             self.collection = self.client.get_collection(name=self.collection_name)
             logger.info(f"Retrieved existing collection: {self.collection_name}")
         except Exception as e:
             logger.info(f"Creating new collection: {self.collection_name}")
-            self.collection = self.client.create_collection(name=self.collection_name)
+            self.collection = self.client.create_collection(
+                name=self.collection_name,
+                embedding_function=embedding_func,
+                metadata={"hnsw:space": "cosine"}  # Explicitly set distance metric to cosine
+            )
             
     def add_document(self, text: str, metadata: Optional[Dict[str, Any]] = None) -> str:
         """
@@ -85,7 +96,7 @@ class MemoryService:
                                query_text: str, 
                                n_results: int = 5,
                                where: Optional[Dict[str, Any]] = None,
-                               threshold: float = 0.85) -> List[Dict[str, Any]]:
+                               threshold: float = 0.3) -> List[Dict[str, Any]]:
         """
         Query the vector store for documents similar to the query text.
         
@@ -93,7 +104,8 @@ class MemoryService:
             query_text: Text to find similar documents for
             n_results: Maximum number of results to return
             where: Optional filter criteria
-            threshold: Maximum distance allowed for results (lower is better)
+            threshold: Minimum similarity score required for results (higher is better for cosine)
+                       Typical values: 0.3 (lenient), 0.5 (balanced), 0.7 (strict)
             
         Returns:
             List of similar documents with their metadata
@@ -102,20 +114,25 @@ class MemoryService:
             results = self.collection.query(
                 query_texts=[query_text],
                 n_results=n_results,
-                where=where
+                where=where,
+                include=["documents", "metadatas", "distances"]
             )
             
             # Format the results
             formatted_results = []
             for i, doc in enumerate(results['documents'][0]):
                 distance = results.get('distances', [[]])[0][i] if results.get('distances') else None
-                print(distance)
+                
+                # Convert distance to similarity score (cosine distance to cosine similarity)
+                similarity = 1 - distance if distance is not None else 0
+                
                 # Only include results that meet the similarity threshold
-                if distance is None or distance <= threshold:
+                if similarity >= threshold:
                     result = {
                         'text': doc,
                         'metadata': results['metadatas'][0][i] if results['metadatas'] else {},
                         'id': results['ids'][0][i],
+                        'similarity': similarity,
                         'distance': distance
                     }
                     formatted_results.append(result)

@@ -26,7 +26,7 @@ class MainLLMService(BaseLLMService):
             model: Model name to use
         """
         super().__init__(api_key)
-
+        print(self.api_key)
         genai.configure(api_key=self.api_key)
         self.model_name = model
         # Load the main system prompt from file
@@ -148,5 +148,5 @@ class MainLLMService(BaseLLMService):
             for i, ctx in enumerate(semantic_context):
                 text = ctx.get('text', '')
                 system_prompt += f"\n{i+1}. {text}"
-        print(f"System Prompt: {system_prompt}")   
+        # print(f"System Prompt: {system_prompt}")   
         return system_prompt

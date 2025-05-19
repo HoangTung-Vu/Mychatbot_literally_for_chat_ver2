@@ -27,7 +27,7 @@ class TemporalAgentService(BaseLLMService):
         """
         super().__init__(api_key, api_key_env_name="GEMINI_API_KEY1")
         self.model = model
-        
+        print(self.api_key)
         # Configure the Gemini API
         genai.configure(api_key=self.api_key)
     

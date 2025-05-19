@@ -23,7 +23,7 @@ class MemorizeAgentService(BaseLLMService):
         """
         super().__init__(api_key, api_key_env_name="GEMINI_API_KEY2")
             # Format the system prompt for information extraction
-        
+        print(self.api_key)
         # Configure the Gemini API
         genai.configure(api_key=self.api_key)
         
@@ -215,7 +215,8 @@ When analyzing text:
 6. Don't explain or introduce your list, just provide the extracted information
 7. Apply a high threshold for importance - when in doubt, exclude the information
 8. IMPORTANT: For text in Vietnamese, maintain the original pronouns and references correctly
-9. Don't switch perspectives when extracting information - maintain the original perspective of the speaker
+9. Don't switch perspectives when extracting information - maintain the original perspective of the speaker (use "you" for the user and "I" for the assistant)
+9a. User message may appear first and then assistant message.
 10. Prioritize unique, specific information over general or commonly known facts
 11. Base on how user and assistant interact, know their relationship, use pronoun "you" for user and "I" for assistant
 

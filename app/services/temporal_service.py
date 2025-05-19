@@ -7,9 +7,9 @@ import json
 import logging
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
-from transformers import AutoTokenizer, AutoModel
 import torch 
 
+from app.services.embedding_functions import VietnameseSBERTEmbeddingFunction
 
 # Define GMT+7 timezone
 GMT7 = timezone(timedelta(hours=7))
@@ -30,8 +30,7 @@ class TemporalService:
             db_path: Path to the SQLite database file
         """
         self.db_path = db_path
-        self.model = AutoModel.from_pretrained("keepitreal/vietnamese-sbert")
-        self.tokenizer = AutoTokenizer.from_pretrained("keepitreal/vietnamese-sbert")
+        self.embedding_function = VietnameseSBERTEmbeddingFunction()
         self._ensure_db_exists()
         
     def _ensure_db_exists(self) -> None:
@@ -140,8 +139,7 @@ class TemporalService:
             
         conn.close()
         
-        # Return in chronological order, excluding the most recent message
-        return list(reversed(messages[1:] if len(messages) > 1 else messages)) 
+        return list(reversed(messages)) 
     
     def execute_sql_query(self, query: str, params: tuple = ()) -> List[Dict[str, Any]]:
         """
@@ -235,12 +233,10 @@ class TemporalService:
         return messages
     
 
-    def _get_embedding(self, text: str) -> torch.Tensor:
-        """Tokenize and get the [CLS] token embedding for a given text."""
-        inputs = self.tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=256)
-        with torch.no_grad():
-            outputs = self.model(**inputs)
-        return outputs.last_hidden_state[:, 0, :].cpu().numpy()
+    def _get_embedding(self, text: str) -> np.ndarray:
+        """Tokenize and get the embedding for a given text using Vietnamese SBERT."""
+        # Use the embedding function to get embeddings
+        return self.embedding_function([text])[0]
 
     def filter_relevant_messages(self, query: str, messages: List[Dict[str, Any]], threshold : float = 0.4) -> List[Dict[str, Any]]:
         """
@@ -256,7 +252,7 @@ class TemporalService:
                 continue
 
             msg_embedding = self._get_embedding(content)
-            similarity = cosine_similarity(query_embedding, msg_embedding)[0][0]
+            similarity = cosine_similarity([query_embedding], [msg_embedding])[0][0]
             # print(f"Similarity: {similarity:.4f} for message: {content[:50]}...")
             if similarity >= threshold:
                 print(f"Similarity: {similarity:.4f} for message: {content[:50]}...")
