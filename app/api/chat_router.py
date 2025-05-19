@@ -9,6 +9,7 @@ import datetime
 from datetime import timezone, timedelta
 
 from app.models.chat_models import ChatRequest, ChatResponse, MemoryEntry
+from app.services.config import *
 from app.services.temporal_service import TemporalService
 from app.services.memory_service import MemoryService
 from app.services.llm.main_llm_service import MainLLMService
@@ -66,13 +67,15 @@ async def chat(
         messages_relevant_from_time = temporal_service.filter_relevant_messages(
             request.prompt, 
             queried_messages,
-            threshold=0.52  # Đặt rõ ngưỡng ở đây
+            threshold=RELEVANT_MESSAGES_THRESHOLD  # Đặt rõ ngưỡng ở đây
         )
             
         # Step 4: Semantic Memory Retrieval
         query_for_semantic = memorize_agent.determine_query_needs(request.prompt)
         retrieved_important_info = memory_service.query_similar_documents(
-            query_for_semantic, n_results=5
+            query_for_semantic, 
+            n_results=SIMILAR_DOCUMENTS_COUNT,
+            threshold=SIMILAR_DOCUMENTS_THRESHOLD
         )
         
         # Step 4a: Filter retrieved information by importance considering time
@@ -93,7 +96,7 @@ async def chat(
             filtered_important_info = []
         
         # Step 5: Recent Conversation History
-        recent_messages = temporal_service.get_recent_messages(count=8)
+        recent_messages = temporal_service.get_recent_messages(count=RECENT_MESSAGES_COUNT)
         
         # Step 6: Generate Response with Main LLM
         response_text = main_llm.generate_response(

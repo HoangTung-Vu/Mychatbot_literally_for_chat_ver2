@@ -7,6 +7,7 @@ import datetime
 from datetime import datetime
 
 from app.services.llm import BaseLLMService
+from app.services.config import MAIN_LLM_CONFIG
 
 logger = logging.getLogger(__name__)
 
@@ -82,13 +83,13 @@ class MainLLMService(BaseLLMService):
                 temporal_context, 
                 semantic_context
             )
-            config = {
-                "max_output_tokens": 512,
-                "temperature": 0.1
-            }
-            print(f"System Instruction: {system_instruction}")
-            self.model = genai.GenerativeModel(self.model_name, generation_config=config, system_instruction=system_instruction)
-
+            
+            # Use the configuration from config.py
+            self.model = genai.GenerativeModel(
+                self.model_name, 
+                generation_config=MAIN_LLM_CONFIG, 
+                system_instruction=system_instruction
+            )
 
             # Generate the response using generate_content
             response = self.model.generate_content(
