@@ -93,7 +93,7 @@ class MemorizeAgentService(BaseLLMService):
         Returns:
             A query for searching semantic memory
         """
-        enhanced_prompt = f"What important information might be needed to answer this query: '{prompt}'"
+        enhanced_prompt = f"What important information might be needed to answer this query: '{prompt}'? Please response only keywords no addtional text."
         response = self.generate_response(enhanced_prompt)
         print(response)
         # The response should be usable as a query for semantic memory

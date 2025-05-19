@@ -61,8 +61,8 @@ async def chat(
         sql_query = temporal_agent.generate_sql_query(request.prompt)
         print(f"Generated SQL Query: {sql_query}")
         queried_messages = temporal_service.execute_sql_query(sql_query)
-        print(f"Queried Messages: {queried_messages}")
-        
+        # print(f"Queried Messages: {queried_messages}")
+
         # Step 3: Relevance Filtering using simple keyword matching
         # In a more sophisticated system, you would use embeddings comparison here
         messages_relevant_from_time = filter_relevant_messages(
