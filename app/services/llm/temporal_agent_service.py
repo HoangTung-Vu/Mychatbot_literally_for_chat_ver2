@@ -1,10 +1,13 @@
 import logging
 from typing import Optional, Dict, Any
 import google.generativeai as genai
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
 
 from app.services.llm import BaseLLMService
+
+# Define GMT+7 timezone
+GMT7 = timezone(timedelta(hours=7))
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +42,8 @@ class TemporalAgentService(BaseLLMService):
             Generated SQL query
         """
         try:
-            # Get current date info for context
-            current_time = datetime.now()
+            # Get current date info for context using GMT+7
+            current_time = datetime.now(GMT7)
             date_context = {
                 "current_date": current_time.strftime("%Y-%m-%d"),
                 "current_day": current_time.strftime("%A"),
@@ -49,15 +52,15 @@ class TemporalAgentService(BaseLLMService):
                 "current_timestamp": int(current_time.timestamp())
             }
             
-            # Calculate today's time range
-            start_of_day = datetime(current_time.year, current_time.month, current_time.day, 0, 0, 0)
+            # Calculate today's time range in GMT+7
+            start_of_day = datetime(current_time.year, current_time.month, current_time.day, 0, 0, 0, tzinfo=GMT7)
             start_timestamp = int(start_of_day.timestamp())
             
-            end_of_day = datetime(current_time.year, current_time.month, current_time.day, 23, 59, 59)
+            end_of_day = datetime(current_time.year, current_time.month, current_time.day, 23, 59, 59, tzinfo=GMT7)
             end_timestamp = int(end_of_day.timestamp())
             
-            # Default query for today if no time references found
-            default_today_query = f"SELECT datetime(timestamp, 'unixepoch') as datetime, role, content FROM conversations WHERE timestamp >= {start_timestamp} AND timestamp <= {end_timestamp} ORDER BY timestamp ASC"
+            # Default query for today if no time references found - use GMT+7 format
+            default_today_query = f"SELECT datetime(timestamp, 'unixepoch', '+7 hours') as datetime, role, content FROM conversations WHERE timestamp >= {start_timestamp} AND timestamp <= {end_timestamp} ORDER BY timestamp ASC"
             
             # Create an enhanced prompt that instructs the agent
             enhanced_prompt = f"""Analyze this user message and generate an appropriate SQL query to retrieve relevant conversations:
@@ -70,7 +73,7 @@ class TemporalAgentService(BaseLLMService):
                {default_today_query}
             3. If time references ARE found, generate a SQL query that:
                - Targets the specific time period mentioned
-               - Uses "SELECT datetime(timestamp, 'unixepoch') as datetime, role, content FROM conversations"
+               - Uses "SELECT datetime(timestamp, 'unixepoch', '+7 hours') as datetime, role, content FROM conversations"
                - Includes appropriate timestamp filters using WHERE clauses
                - Orders by timestamp DESC
                - Limits to 10 results
@@ -102,7 +105,7 @@ class TemporalAgentService(BaseLLMService):
         except Exception as e:
             logger.error(f"Error generating SQL query: {e}")
             # Return a safe default query in case of error
-            return f"SELECT datetime(timestamp, 'unixepoch') as datetime, role, content FROM conversations WHERE timestamp >= {start_timestamp} AND timestamp <= {end_timestamp} ORDER BY timestamp ASC"
+            return f"SELECT datetime(timestamp, 'unixepoch', '+7 hours') as datetime, role, content FROM conversations WHERE timestamp >= {start_timestamp} AND timestamp <= {end_timestamp} ORDER BY timestamp ASC"
     
     def _clean_sql_response(self, response_text: str) -> str:
         """
@@ -138,8 +141,8 @@ class TemporalAgentService(BaseLLMService):
         if not sql_lower.startswith("select "):
             return False
         
-        # Check that it contains datetime conversion
-        if "datetime(timestamp, 'unixepoch') as datetime" not in sql_lower:
+        # Check that it contains datetime conversion with GMT+7 timezone
+        if "datetime(timestamp, 'unixepoch', '+7 hours') as datetime" not in sql_lower:
             return False
         
         # Check that it contains role
@@ -189,7 +192,7 @@ class TemporalAgentService(BaseLLMService):
         2. If NO time references are found in the message, ALWAYS return EXACTLY this query:
            {default_today_query}
         3. If time references ARE found, generate a time-specific query following these rules:
-           - Use "SELECT datetime(timestamp, 'unixepoch') as datetime, role, content FROM conversations"
+           - Use "SELECT datetime(timestamp, 'unixepoch', '+7 hours') as datetime, role, content FROM conversations"
            - Include WHERE clauses to filter by the appropriate time range
            - Use ORDER BY timestamp DESC LIMIT 10
 
@@ -199,6 +202,7 @@ class TemporalAgentService(BaseLLMService):
         - When there are no time references, default to today's query EXACTLY as provided
         - NEVER modify the default today query's format - it must be used exactly as shown
         - ALWAYS include the content column in all queries
+        - ALWAYS use '+7 hours' in the datetime function to use GMT+7 timezone
 
         EXAMPLES:
 
@@ -206,10 +210,10 @@ class TemporalAgentService(BaseLLMService):
         SQL (no time reference): {default_today_query}
 
         User message: "What did we talk about yesterday?"
-        SQL (has time reference): SELECT datetime(timestamp, 'unixepoch') as datetime, role, content FROM conversations WHERE timestamp >= {current_timestamp - 86400} AND timestamp < {current_timestamp - 86400 + 86399} ORDER BY timestamp DESC LIMIT 10
+        SQL (has time reference): SELECT datetime(timestamp, 'unixepoch', '+7 hours') as datetime, role, content FROM conversations WHERE timestamp >= {current_timestamp - 86400} AND timestamp < {current_timestamp - 86400 + 86399} ORDER BY timestamp DESC LIMIT 10
 
         User message: "Tell me what I asked about in May"
-        SQL (has time reference): SELECT datetime(timestamp, 'unixepoch') as datetime, role, content FROM conversations WHERE timestamp >= strftime('%s', '2025-05-01 00:00:00') AND timestamp < strftime('%s', '2025-06-01 00:00:00') ORDER BY timestamp DESC LIMIT 10"""
+        SQL (has time reference): SELECT datetime(timestamp, 'unixepoch', '+7 hours') as datetime, role, content FROM conversations WHERE timestamp >= strftime('%s', '2025-05-01 00:00:00') AND timestamp < strftime('%s', '2025-06-01 00:00:00') ORDER BY timestamp DESC LIMIT 10"""
                 
     def generate_response(self, prompt: str, **kwargs) -> str:
         """

@@ -4,10 +4,14 @@ import logging
 import uuid
 import datetime
 from typing import List, Dict, Any, Optional, Union
+from datetime import timezone, timedelta
 
 import chromadb
 from chromadb.api.models import Collection
 import numpy as np
+
+# Define GMT+7 timezone
+GMT7 = timezone(timedelta(hours=7))
 
 logger = logging.getLogger(__name__)
 
@@ -62,9 +66,9 @@ class MemoryService:
         if 'timestamp' not in metadata:
             metadata['timestamp'] = time.time()
         
-        # Add ISO format datetime if not present
+        # Add ISO format datetime if not present, using GMT+7 timezone
         if 'datetime' not in metadata:
-            metadata['datetime'] = datetime.datetime.now().isoformat()
+            metadata['datetime'] = datetime.datetime.now(GMT7).isoformat()
             
         try:
             self.collection.add(
@@ -80,7 +84,8 @@ class MemoryService:
     def query_similar_documents(self, 
                                query_text: str, 
                                n_results: int = 5,
-                               where: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+                               where: Optional[Dict[str, Any]] = None,
+                               threshold: float = 0.8) -> List[Dict[str, Any]]:
         """
         Query the vector store for documents similar to the query text.
         
@@ -88,6 +93,7 @@ class MemoryService:
             query_text: Text to find similar documents for
             n_results: Maximum number of results to return
             where: Optional filter criteria
+            threshold: Maximum distance allowed for results (lower is better)
             
         Returns:
             List of similar documents with their metadata
@@ -102,13 +108,17 @@ class MemoryService:
             # Format the results
             formatted_results = []
             for i, doc in enumerate(results['documents'][0]):
-                result = {
-                    'text': doc,
-                    'metadata': results['metadatas'][0][i] if results['metadatas'] else {},
-                    'id': results['ids'][0][i],
-                    'distance': results.get('distances', [[]])[0][i] if results.get('distances') else None
-                }
-                formatted_results.append(result)
+                distance = results.get('distances', [[]])[0][i] if results.get('distances') else None
+                print(distance)
+                # Only include results that meet the similarity threshold
+                if distance is None or distance <= threshold:
+                    result = {
+                        'text': doc,
+                        'metadata': results['metadatas'][0][i] if results['metadatas'] else {},
+                        'id': results['ids'][0][i],
+                        'distance': distance
+                    }
+                    formatted_results.append(result)
                 
             return formatted_results
         except Exception as e:
@@ -151,9 +161,9 @@ class MemoryService:
             if 'timestamp' not in metadata:
                 metadata['timestamp'] = time.time()
                 
-            # Add ISO format datetime if not present
+            # Add ISO format datetime if not present, using GMT+7 timezone
             if 'datetime' not in metadata:
-                metadata['datetime'] = datetime.datetime.now().isoformat()
+                metadata['datetime'] = datetime.datetime.now(GMT7).isoformat()
                 
             self.collection.update(
                 ids=[doc_id],

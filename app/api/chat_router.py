@@ -6,6 +6,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 import uuid
 import time
 import datetime
+from datetime import timezone, timedelta
 
 from app.models.chat_models import ChatRequest, ChatResponse, MemoryEntry
 from app.services.temporal_service import TemporalService
@@ -13,6 +14,9 @@ from app.services.memory_service import MemoryService
 from app.services.llm.main_llm_service import MainLLMService
 from app.services.llm.temporal_agent_service import TemporalAgentService
 from app.services.llm.memorize_agent_service import MemorizeAgentService
+
+# Define GMT+7 timezone
+GMT7 = timezone(timedelta(hours=7))
 
 logger = logging.getLogger(__name__)
 
@@ -63,9 +67,9 @@ async def chat(
         queried_messages = temporal_service.execute_sql_query(sql_query)
         # print(f"Queried Messages: {queried_messages}")
 
-        # Step 3: Relevance Filtering using simple keyword matching
+        # Step 3: Relevance Filtering
         # In a more sophisticated system, you would use embeddings comparison here
-        messages_relevant_from_time = filter_relevant_messages(
+        messages_relevant_from_time = temporal_service.filter_relevant_messages(
             request.prompt, queried_messages
         )
         
@@ -76,7 +80,7 @@ async def chat(
         )
         
         # Step 4a: Filter retrieved information by importance considering time
-        current_time = datetime.datetime.now()
+        current_time = datetime.datetime.now(GMT7)
         filtered_important_info_text = memorize_agent.important_till_now(
             retrieved_important_info, 
             current_time
@@ -149,34 +153,6 @@ async def get_chat_history(
             detail="An error occurred while retrieving chat history."
         )
 
-def filter_relevant_messages(prompt: str, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Filter messages based on relevance to the prompt.
-    This is a simple implementation using keyword matching.
-    A more sophisticated approach would use embeddings and cosine similarity.
-    """
-    if not messages:
-        return []
-        
-    # Extract keywords from the prompt (simple implementation)
-    prompt_words = set(prompt.lower().split())
-    
-    # Filter messages that have overlapping words with the prompt
-    relevant_messages = []
-    for msg in messages:
-        msg_words = set(msg.get('content', '').lower().split())
-        # Calculate a simple relevance score based on word overlap
-        overlap = len(prompt_words.intersection(msg_words))
-        if overlap > 0:
-            msg['relevance_score'] = overlap / len(prompt_words)
-            relevant_messages.append(msg)
-    
-    # Sort by relevance
-    relevant_messages.sort(key=lambda x: x.get('relevance_score', 0), reverse=True)
-    
-    # Return top 5 most relevant messages
-    return relevant_messages[:5]
-
 async def save_memory_in_background(
     prompt: str,
     response: str,
@@ -204,7 +180,7 @@ async def save_memory_in_background(
                 # Add timestamp and datetime to metadata
                 metadata.update({
                     "timestamp": time.time(),
-                    "datetime": datetime.datetime.now().isoformat()
+                    "datetime": datetime.datetime.now(GMT7).isoformat()
                 })
                 
                 memory_service.add_document(text, metadata)

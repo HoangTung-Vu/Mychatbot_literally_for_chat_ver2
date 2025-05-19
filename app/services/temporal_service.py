@@ -2,9 +2,15 @@ import sqlite3
 import os
 import time
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import json
 import logging
+import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+# Define GMT+7 timezone
+GMT7 = timezone(timedelta(hours=7))
 
 logger = logging.getLogger(__name__)
 
@@ -115,12 +121,15 @@ class TemporalService:
         # Convert to list of dictionaries
         messages = []
         for row in rows:
+            # Create datetime with GMT+7 timezone
+            dt = datetime.fromtimestamp(row['timestamp'], tz=GMT7)
+            
             message = {
                 'id': row['id'],
                 'role': row['role'],
                 'content': row['content'],
                 'timestamp': row['timestamp'],
-                'datetime': datetime.fromtimestamp(row['timestamp']).isoformat(),
+                'datetime': dt.isoformat(),
                 'metadata': json.loads(row['metadata']) if row['metadata'] else {}
             }
             messages.append(message)
@@ -141,6 +150,12 @@ class TemporalService:
         Returns:
             List of results as dictionaries
         """
+        # Modify the query to use localtime instead of UTC
+        query = query.replace(
+            "datetime(timestamp, 'unixepoch')", 
+            "datetime(timestamp, 'unixepoch', '+7 hours')"
+        )
+        
         conn = self._get_connection()
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
@@ -160,9 +175,10 @@ class TemporalService:
                 else:
                     result['metadata'] = {}
                     
-                # Add formatted datetime
-                if 'timestamp' in result:
-                    result['datetime'] = datetime.fromtimestamp(result['timestamp']).isoformat()
+                # Add formatted datetime if timestamp exists but not already converted by SQL
+                if 'timestamp' in result and 'datetime' not in result:
+                    dt = datetime.fromtimestamp(result['timestamp'], tz=GMT7)
+                    result['datetime'] = dt.isoformat()
                     
                 results.append(result)
                 
@@ -197,12 +213,15 @@ class TemporalService:
         # Convert to list of dictionaries
         messages = []
         for row in rows:
+            # Create datetime with GMT+7 timezone
+            dt = datetime.fromtimestamp(row['timestamp'], tz=GMT7)
+            
             message = {
                 'id': row['id'],
                 'role': row['role'],
                 'content': row['content'],
                 'timestamp': row['timestamp'],
-                'datetime': datetime.fromtimestamp(row['timestamp']).isoformat(),
+                'datetime': dt.isoformat(),
                 'metadata': json.loads(row['metadata']) if row['metadata'] else {}
             }
             messages.append(message)
@@ -210,3 +229,54 @@ class TemporalService:
         conn.close()
         
         return messages
+    
+    def filter_relevant_messages(self, prompt: str, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Filter messages based on relevance to the prompt using cosine similarity.
+        
+        Args:
+            prompt: The query prompt to find relevant messages for
+            messages: List of message dictionaries
+            
+        Returns:
+            List of relevant message dictionaries sorted by similarity
+        """
+        if not messages or not prompt:
+            return []
+        
+        # Extract content from messages
+        contents = [msg.get('content', '') for msg in messages]
+        if not contents:
+            return []
+        
+        # Include the prompt as the last document
+        all_docs = contents + [prompt]
+        
+        # Create TF-IDF vectors
+        try:
+            vectorizer = TfidfVectorizer(stop_words='english')
+            tfidf_matrix = vectorizer.fit_transform(all_docs)
+            
+            # Get the prompt vector (last in the matrix)
+            prompt_vector = tfidf_matrix[-1]
+            
+            # Calculate cosine similarity between prompt and each message
+            similarities = cosine_similarity(prompt_vector, tfidf_matrix[:-1])[0]
+            
+            # Add similarity scores to messages and filter by threshold
+            relevant_messages = []
+            for i, (score, msg) in enumerate(zip(similarities, messages)):
+                # Only include messages with similarity < 0.3
+                if score < 0.2:
+                    msg_copy = msg.copy()
+                    msg_copy['relevance_score'] = float(score)
+                    relevant_messages.append(msg_copy)
+            
+            # Sort by timestamp (earlier first) instead of relevance score
+            relevant_messages.sort(key=lambda x: x.get('timestamp', 0))
+            
+            return relevant_messages
+        
+        except Exception as e:
+            logger.error(f"Error calculating message similarity: {e}")
+            return []
