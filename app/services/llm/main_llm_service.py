@@ -148,5 +148,5 @@ class MainLLMService(BaseLLMService):
             for i, ctx in enumerate(semantic_context):
                 text = ctx.get('text', '')
                 system_prompt += f"\n{i+1}. {text}"
-                
+        print(f"System Prompt: {system_prompt}")   
         return system_prompt

@@ -164,17 +164,20 @@ async def save_memory_in_background(
     This implements the Save Stage of the system.
     """
     try:
-        # Step 1: Save the response to temporal memory
-        temporal_service.save_interaction(
-            content=response,
-            role="assistant"
-        )
-        
+
         # Step 1a: Save the prompt to temporal memory
         temporal_service.save_interaction(
             content=prompt,
             role="user"
         )
+
+        # Step 1b: Save the response to temporal memory
+        temporal_service.save_interaction(
+            content=response,
+            role="assistant"
+        )
+        
+
 
         # Step 2: Extract important information from the conversation
         extracted_info = memorize_agent.extract_from_conversation(prompt, response)

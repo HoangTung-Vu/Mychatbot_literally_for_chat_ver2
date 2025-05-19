@@ -6,7 +6,7 @@ This file centralizes all configuration parameters used across services.
 # Chat history and memory configurations
 RECENT_MESSAGES_COUNT = 12  # Number of most recent messages to include for context
 
-SIMILAR_DOCUMENTS_THRESHOLD = 0.85  # Threshold for query_similar_documents (lower means more similar)
+SIMILAR_DOCUMENTS_THRESHOLD = 0.75  # Threshold for query_similar_documents (lower means more similar)
 SIMILAR_DOCUMENTS_COUNT = 6  # Number of similar documents to retrieve
 
 

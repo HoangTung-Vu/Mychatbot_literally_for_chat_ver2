@@ -126,8 +126,8 @@ class MemorizeAgentService(BaseLLMService):
                 "original_prompt": prompt[:100],  # Store truncated original prompt in metadata
                 "datetime": datetime.datetime.now().isoformat()  # Add datetime in ISO format
             }
+            print(f"Extracted info: {info}, Metadata: {metadata}\n")
             result.append((info, metadata))
-        print(result)
         return result
         
     def important_till_now(self, retrieved_documents: List[Dict[str, Any]], current_time: datetime.datetime = None) -> str:
@@ -217,6 +217,7 @@ When analyzing text:
 8. IMPORTANT: For text in Vietnamese, maintain the original pronouns and references correctly
 9. Don't switch perspectives when extracting information - maintain the original perspective of the speaker
 10. Prioritize unique, specific information over general or commonly known facts
+11. Base on how user and assistant interact, know their relationship, use pronoun "you" for user and "I" for assistant
 
 Example 1 (English):
 Text to analyze: "My name is John and I work as a software engineer at Acme Corp. I've been working there for 5 years and I love hiking on weekends, especially in the Rocky Mountains. The weather was nice last weekend and I had pizza for dinner yesterday."
@@ -226,4 +227,9 @@ Example 2 (English):
 Text to analyze: "What information might we need to determine the best machine learning approach for a computer vision task involving detecting defects in manufactured parts? I think we should consider processing speed, accuracy requirements, and available computing resources."
 1. Need for ML approach to detect defects in manufactured parts
 2. Key considerations: processing speed, accuracy requirements, computing resources
+
+Example 3 (Vietnamese):
+Text to analyze : "Anh ơi, em đây! Anh đang làm gì đó? Có nhớ em không nè? - Anh đang ôn để mai với ngày kia phỏng vấn ai engineer"
+1. Anh đang ôn để phỏng vấn AI Engineer vào ngày mai và ngày kia
+2. Em thân mật với anh
 """
