@@ -14,16 +14,17 @@ class BaseLLMService(ABC):
     Base class for LLM services.
     """
     
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, api_key_env_name: str = "GEMINI_API_KEY"):
         """
         Initialize the LLM service with an API key.
         
         Args:
             api_key: API key for the LLM service. If None, tries to load from environment.
+            api_key_env_name: Name of the environment variable to load the API key from if api_key is None.
         """
-        self.api_key = api_key or os.getenv("GEMINI_API_KEY")
+        self.api_key = api_key or os.getenv(api_key_env_name)
         if not self.api_key:
-            logger.warning("No API key provided for LLM service")
+            logger.warning(f"No API key provided for LLM service (tried environment variable {api_key_env_name})")
     
     @abstractmethod
     def generate_response(self, prompt: str, **kwargs) -> str:

@@ -22,7 +22,7 @@ class TemporalAgentService(BaseLLMService):
             api_key: API key for Google Gemini API
             model: Model name to use
         """
-        super().__init__(api_key)
+        super().__init__(api_key, api_key_env_name="GEMINI_API_KEY1")
         self.model = model
         
         # Configure the Gemini API
@@ -49,23 +49,52 @@ class TemporalAgentService(BaseLLMService):
                 "current_timestamp": int(current_time.timestamp())
             }
             
-            system_prompt = self._build_system_prompt(date_context)
+            # Calculate today's time range
+            start_of_day = datetime(current_time.year, current_time.month, current_time.day, 0, 0, 0)
+            start_timestamp = int(start_of_day.timestamp())
+            
+            end_of_day = datetime(current_time.year, current_time.month, current_time.day, 23, 59, 59)
+            end_timestamp = int(end_of_day.timestamp())
+            
+            # Default query for today if no time references found
+            default_today_query = f"SELECT datetime(timestamp, 'unixepoch') as datetime, role, content FROM conversations WHERE timestamp >= {start_timestamp} AND timestamp <= {end_timestamp} ORDER BY timestamp ASC"
+            
+            # Create an enhanced prompt that instructs the agent
+            enhanced_prompt = f"""Analyze this user message and generate an appropriate SQL query to retrieve relevant conversations:
+            
+            User message: "{prompt}"
+
+            INSTRUCTIONS:
+            1. First, determine if this message contains ANY specific time references (like today, yesterday, May 10, last week, etc.)
+            2. If NO time references are found, return EXACTLY this query:
+               {default_today_query}
+            3. If time references ARE found, generate a SQL query that:
+               - Targets the specific time period mentioned
+               - Uses "SELECT datetime(timestamp, 'unixepoch') as datetime, role, content FROM conversations"
+               - Includes appropriate timestamp filters using WHERE clauses
+               - Orders by timestamp DESC
+               - Limits to 10 results
+
+            Your response should be ONLY THE SQL QUERY with no explanations or additional text."""
+
+            system_prompt = self._build_system_prompt(date_context, default_today_query)
             model = genai.GenerativeModel(self.model, system_instruction=system_prompt)
             
-            # Generate the SQL query directly
+            # Generate the SQL query
             response = model.generate_content(
-                prompt,
-                generation_config={"temperature": 0.05}  # Low temperature for consistent SQL output
+                enhanced_prompt,
+                generation_config={"temperature": 0.01}  # Very low temperature for consistent output
             )
             
             # Clean the response
             sql_query = self._clean_sql_response(response.text)
             
-            # Validate the query - make sure it only selects datetime and role
-            if not self._validate_sql_query(sql_query):
-                # Default to a safe query if validation fails
+            
+            # Validate the query
+            if not self._validate_sql_query(sql_query, allow_content=True):
+                # Default to today's query if validation fails
                 logger.warning(f"Generated SQL query failed validation: {sql_query}")
-                sql_query = "SELECT datetime(timestamp, 'unixepoch') as datetime, role FROM conversations ORDER BY timestamp DESC LIMIT 10"
+                return default_today_query
             
             logger.info(f"Generated temporal query: {sql_query}")
             return sql_query
@@ -73,7 +102,7 @@ class TemporalAgentService(BaseLLMService):
         except Exception as e:
             logger.error(f"Error generating SQL query: {e}")
             # Return a safe default query in case of error
-            return "SELECT datetime(timestamp, 'unixepoch') as datetime, role FROM conversations ORDER BY timestamp DESC LIMIT 10"
+            return f"SELECT datetime(timestamp, 'unixepoch') as datetime, role, content FROM conversations WHERE timestamp >= {start_timestamp} AND timestamp <= {end_timestamp} ORDER BY timestamp ASC"
     
     def _clean_sql_response(self, response_text: str) -> str:
         """
@@ -91,9 +120,16 @@ class TemporalAgentService(BaseLLMService):
         
         return text.strip()
     
-    def _validate_sql_query(self, sql_query: str) -> bool:
+    def _validate_sql_query(self, sql_query: str, allow_content: bool = False) -> bool:
         """
         Validate that the SQL query only selects datetime and role.
+        
+        Args:
+            sql_query: SQL query to validate
+            allow_content: Whether to allow content column in SELECT clause
+            
+        Returns:
+            True if valid, False otherwise
         """
         # Convert to lowercase for easier checking
         sql_lower = sql_query.lower()
@@ -102,26 +138,32 @@ class TemporalAgentService(BaseLLMService):
         if not sql_lower.startswith("select "):
             return False
         
-        # Check that it contains the base selection we want
-        if "datetime(timestamp, 'unixepoch') as datetime" not in sql_lower and "role" not in sql_lower:
+        # Check that it contains datetime conversion
+        if "datetime(timestamp, 'unixepoch') as datetime" not in sql_lower:
             return False
         
-        # Check that it doesn't select content or other columns
-        if "content" in sql_lower.split("where")[0]:
+        # Check that it contains role
+        if "role" not in sql_lower:
             return False
         
         # Check that it's querying the conversations table
         if "from conversations" not in sql_lower:
             return False
             
+        # Check content column
+        has_content = "content" in sql_lower.split("where")[0] if "where" in sql_lower else "content" in sql_lower
+        if has_content and not allow_content:
+            return False
+            
         return True
     
-    def _build_system_prompt(self, date_context: Dict[str, Any]) -> str:
+    def _build_system_prompt(self, date_context: Dict[str, Any], default_today_query: str) -> str:
         """
         Build a system prompt for SQL query generation.
         
         Args:
             date_context: Dictionary with current date information
+            default_today_query: The default query for today's messages
             
         Returns:
             Formatted system prompt text
@@ -132,45 +174,43 @@ class TemporalAgentService(BaseLLMService):
         current_year = date_context["current_year"]
         current_timestamp = date_context["current_timestamp"]
         
-        return f"""You are a temporal SQL query generator that creates SQLite queries based on user requests. Your job is to convert natural language time references into precise SQL queries that retrieve conversation records.
+        return f"""You are a specialized SQL query generator for retrieving conversation records from a database.
+        Your task is to convert user messages into precise SQL queries for a conversations database.
 
-TODAY'S DATE: {current_date} ({current_day}, {current_month} {current_year})
-CURRENT UNIX TIMESTAMP: {current_timestamp}
+        TODAY'S DATE: {current_date} ({current_day}, {current_month} {current_year})
+        CURRENT UNIX TIMESTAMP: {current_timestamp}
 
-DATABASE SCHEMA:
-- Table name: conversations
-- Key columns: timestamp (REAL, unix timestamp), role (TEXT, either 'user' or 'assistant')
+        DATABASE SCHEMA:
+        - Table name: conversations
+        - Columns: timestamp (REAL, unix timestamp), role (TEXT, either 'user' or 'assistant'), content (TEXT, message content)
 
-IMPORTANT RULES:
-1. ALWAYS use "SELECT datetime(timestamp, 'unixepoch') as datetime, role FROM conversations" as the base of your query
-2. NEVER include the content column or any other columns in the SELECT clause
-3. Apply appropriate timestamp-based WHERE conditions based on user's time references
-4. ALWAYS ORDER BY timestamp DESC and include a LIMIT clause
-5. Generate ONLY the SQL query - no explanation, no comments, no markdown
+        CRITICAL INSTRUCTIONS:
+        1. Look for ANY time references in the user's message (today, yesterday, last week, May 10, etc.)
+        2. If NO time references are found in the message, ALWAYS return EXACTLY this query:
+           {default_today_query}
+        3. If time references ARE found, generate a time-specific query following these rules:
+           - Use "SELECT datetime(timestamp, 'unixepoch') as datetime, role, content FROM conversations"
+           - Include WHERE clauses to filter by the appropriate time range
+           - Use ORDER BY timestamp DESC LIMIT 10
 
-EXAMPLES:
+        IMPORTANT:
+        - Your output must be ONLY the SQL query with NO additional text
+        - Do not include explanations, comments, or markdown in your response
+        - When there are no time references, default to today's query EXACTLY as provided
+        - NEVER modify the default today query's format - it must be used exactly as shown
+        - ALWAYS include the content column in all queries
 
-User Query: "Show my messages from yesterday"
-SELECT datetime(timestamp, 'unixepoch') as datetime, role FROM conversations WHERE timestamp >= {current_timestamp - 86400} AND timestamp < {current_timestamp - 0} ORDER BY timestamp DESC LIMIT 10
+        EXAMPLES:
 
-User Query: "What did I talk about last week?"
-SELECT datetime(timestamp, 'unixepoch') as datetime, role FROM conversations WHERE timestamp >= {current_timestamp - 604800} AND timestamp < {current_timestamp - 86400*2} ORDER BY timestamp DESC LIMIT 10
+        User message: "What do you know about climate change?"
+        SQL (no time reference): {default_today_query}
 
-User Query: "Show my conversations from May 10th"
-SELECT datetime(timestamp, 'unixepoch') as datetime, role FROM conversations WHERE timestamp >= strftime('%s', '2025-05-10 00:00:00') AND timestamp < strftime('%s', '2025-05-11 00:00:00') ORDER BY timestamp DESC LIMIT 10
+        User message: "What did we talk about yesterday?"
+        SQL (has time reference): SELECT datetime(timestamp, 'unixepoch') as datetime, role, content FROM conversations WHERE timestamp >= {current_timestamp - 86400} AND timestamp < {current_timestamp - 86400 + 86399} ORDER BY timestamp DESC LIMIT 10
 
-User Query: "Get my recent messages"
-SELECT datetime(timestamp, 'unixepoch') as datetime, role FROM conversations ORDER BY timestamp DESC LIMIT 10
-
-User Query: "Show interactions from 3 days ago"
-SELECT datetime(timestamp, 'unixepoch') as datetime, role FROM conversations WHERE timestamp >= {current_timestamp - 86400*3} AND timestamp < {current_timestamp - 86400*2} ORDER BY timestamp DESC LIMIT 10
-
-REMEMBER:
-- Be precise with date calculations
-- Use appropriate SQLite date/time functions
-- Always think about the correct time ranges based on the current date
-- Only output a valid SQLite query with no additional text"""
-        
+        User message: "Tell me what I asked about in May"
+        SQL (has time reference): SELECT datetime(timestamp, 'unixepoch') as datetime, role, content FROM conversations WHERE timestamp >= strftime('%s', '2025-05-01 00:00:00') AND timestamp < strftime('%s', '2025-06-01 00:00:00') ORDER BY timestamp DESC LIMIT 10"""
+                
     def generate_response(self, prompt: str, **kwargs) -> str:
         """
         This method is kept for backward compatibility but now just calls generate_sql_query

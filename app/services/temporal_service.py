@@ -127,8 +127,8 @@ class TemporalService:
             
         conn.close()
         
-        # Return in chronological order
-        return list(reversed(messages))
+        # Return in chronological order, excluding the most recent message
+        return list(reversed(messages[1:] if len(messages) > 1 else messages)) 
     
     def execute_sql_query(self, query: str, params: tuple = ()) -> List[Dict[str, Any]]:
         """

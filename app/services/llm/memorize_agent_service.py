@@ -21,14 +21,15 @@ class MemorizeAgentService(BaseLLMService):
             api_key: API key for Google Gemini API
             model: Model name to use
         """
-        super().__init__(api_key)
+        super().__init__(api_key, api_key_env_name="GEMINI_API_KEY2")
             # Format the system prompt for information extraction
-        system_prompt = self._build_system_prompt()
-        self.model = genai.GenerativeModel(model, system_instruction=system_prompt)
-
         
         # Configure the Gemini API
         genai.configure(api_key=self.api_key)
+        
+        system_prompt = self._build_system_prompt()
+        self.model = genai.GenerativeModel(model, system_instruction=system_prompt)
+
         
     def generate_response(self, prompt: str, **kwargs) -> str:
         """
@@ -173,8 +174,8 @@ class MemorizeAgentService(BaseLLMService):
             
         # Prepare prompt for the LLM to evaluate importance
         prompt = """Below are pieces of information from memory with their age in days. 
-Some information may be outdated or less relevant now.
-Please select and prioritize the most important, relevant, and current information:
+                    Some information may be outdated or less relevant now.
+                    Please select and prioritize the most important, relevant, and current information:
 
 """
         for i, doc in enumerate(documents_with_age, 1):
@@ -208,19 +209,19 @@ When analyzing text:
 1. Focus on factual information, preferences, personal details, and key concepts
 2. Ignore pleasantries, common knowledge, and contextual conversation
 3. Format each important piece of information as a separate, concise statement
-4. Include only the most salient details that would be useful in future conversations
+4. (IMPORTANT) Include only the most salient details that would be useful in future conversations
 5. Present each item on a new line, numbered (1, 2, 3, etc.)
 6. Don't explain or introduce your list, just provide the extracted information
 7. You may also filter important information based on its relevance and age
+8. IMPORTANT: For text in Vietnamese, maintain the original pronouns and references correctly
+9. Don't switch perspectives when extracting information - maintain the original perspective of the speaker
 
-Example 1:
+Example 1 (English):
 Text to analyze: "My name is John and I work as a software engineer at Acme Corp. I've been working there for 5 years and I love hiking on weekends, especially in the Rocky Mountains."
-1. John works as a software engineer at Acme Corp
-2. John has worked at Acme Corp for 5 years
-3. John enjoys hiking
-4. John likes hiking in the Rocky Mountains
+1. John works as a software engineer at Acme Corp for 5 years
+2. John enjoys hiking in the rocky mountains on weekends
 
-Example 2:
+Example 2 (English):
 Text to analyze: "What information might we need to determine the best machine learning approach for a computer vision task involving detecting defects in manufactured parts?"
 1. ML approach for computer vision
 2. detecting defects in manufactured parts
