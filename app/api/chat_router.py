@@ -66,7 +66,7 @@ async def chat(
         messages_relevant_from_time = temporal_service.filter_relevant_messages(
             request.prompt, 
             queried_messages,
-            threshold=0.55  # Đặt rõ ngưỡng ở đây
+            threshold=0.52  # Đặt rõ ngưỡng ở đây
         )
             
         # Step 4: Semantic Memory Retrieval
@@ -104,10 +104,6 @@ async def chat(
         )
         
         # Save Stage: Add the response to the conversation history
-        temporal_service.save_interaction(
-            content=request.prompt,
-            role="user"
-        )
         background_tasks.add_task(
             save_memory_in_background,
             request.prompt,
@@ -171,6 +167,12 @@ async def save_memory_in_background(
             role="assistant"
         )
         
+        # Step 1a: Save the prompt to temporal memory
+        temporal_service.save_interaction(
+            content=prompt,
+            role="user"
+        )
+
         # Step 2: Extract important information from the conversation
         extracted_info = memorize_agent.extract_from_conversation(prompt, response)
         
